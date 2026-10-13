@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>虚拟电脑桌面</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
+<style>
+/* ============ 基础 ============ */
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; overflow:hidden; }
+body {
+  font-family:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+  user-select:none; -webkit-user-select:none;
+  background:#0b1026;
+}
+input, textarea { user-select:text; -webkit-user-select:text; font-family:inherit; }
+::-webkit-scrollbar { width:8px; height:8px; }
+::-webkit-scrollbar-thumb { background:rgba(0,0,0,.22); border-radius:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+
+/* ============ 桌面 ============ */
+#desktop {
+  position:fixed; inset:0; overflow:hidden;
+  background:
+    radial-gradient(1200px 800px at 15% 18%, rgba(96,165,250,.55), transparent 60%),
+    radial-gradient(1000px 700px at 85% 75%, rgba(168,85,247,.5), transparent 62%),
+    radial-gradient(700px 500px at 60% 12%, rgba(56,189,248,.35), transparent 60%),
+    linear-gradient(160deg,#0b1026 0%, #101c3a 45%, #0a1228 100%);
+}
+
+/* ============ 桌面图标 ============ */
+#icons {
+  position:absolute; top:12px; left:10px;
+  display:flex; flex-direction:column; flex-wrap:wrap; align-content:flex-start;
+  gap:2px; height:calc(100% - 48px - 20px);
+}
+.icon {
+  width:88px; padding:8px 4px 6px; text-align:center; cursor:default;
+  border-radius:6px; border:1px solid transparent; position:relative;
+}
+.icon .ico { font-size:38px; line-height:1.15; filter:drop-shadow(0 2px 5px rgba(0,0,0,.55)); }
+.icon .label {
+  color:#fff; font-size:12px; margin-top:3px; line-height:1.35;
+  text-shadow:0 1px 3px rgba(0,0,0,.85);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.icon:hover { background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.22); }
+.icon.selected { background:rgba(255,255,255,.2); border-color:rgba(255,255,255,.45); }
+.icon.app-icon::after {
+  content:''; position:absolute; top:5px; right:16px; width:8px; height:8px;
+  border-radius:50%; background:#3ddc84; box-shadow:0 0 6px rgba(61,220,132,.9);
+}
+.icon.shake { animation:shake .45s; }
+@keyframes shake {
+  0%,100% { transform:translateX(0); }
+  20% { transform:translateX(-5px); }
+  40% { transform:translateX(5px); }
+  60% { transform:translateX(-3px); }
+  80% { transform:translateX(3px); }
+}
+
+/* ============ 窗口 ============ */
+#windows { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:10; }
+.window {
+  position:absolute; pointer-events:auto; display:flex; flex-direction:column;
+  background:#fff; border-radius:10px; overflow:hidden;
+  box-shadow:0 14px 46px rgba(0,0,0,.5);
+  animation:winIn .18s ease;
+}
+@keyframes winIn { from { transform:scale(.93); opacity:0; } to { transform:scale(1); opacity:1; } }
+.window.minimized { display:none; }
+.window.maximized {
+  left:0 !important; top:0 !important;
+  width:100% !important; height:calc(100% - 48px) !important;
+  border-radius:0;
+}
+.titlebar {
+  height:36px; background:#f0f0f2; display:flex; align-items:center;
+  padding-left:10px; cursor:default; flex-shrink:0; touch-action:none;
+}
+.window.active .titlebar { background:#fff; }
+.win-ico { font-size:15px; margin-right:8px; }
+.win-title { flex:1; font-size:13px; color:#333; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.win-controls { display:flex; height:100%; }
+.win-btn {
+  width:46px; height:36px; border:none; background:none; font-size:12px;
+  color:#444; cursor:pointer; display:flex; align-items:center; justify-content:center;
+}
+.win-btn:hover { background:rgba(0,0,0,.08); }
+.win-close:hover { background:#e81123; color:#fff; }
+.win-body { flex:1; overflow:hidden; display:flex; position:relative; }
+
+/* ============ 任务栏 ============ */
+#taskbar {
+  position:absolute; left:0; right:0; bottom:0; height:48px; z-index:1000;
+  background:rgba(20,24,32,.88); backdrop-filter:blur(20px);
+  display:flex; align-items:center; padding:0 10px;
+}
+.tb-start {
+  width:42px; height:42px; border:none; background:none; cursor:pointer;
+  border-radius:8px; display:flex; align-items:center; justify-content:center;
+}
+.tb-start:hover { background:rgba(255,255,255,.12); }
+.win-logo { display:grid; grid-template-columns:repeat(2,7px); gap:2px; }
+.win-logo i { width:7px; height:7px; background:#4fc3f7; border-radius:1px; }
+#tbApps { flex:1; display:flex; justify-content:center; gap:4px; min-width:0; overflow:hidden; }
+.tb-app {
+  display:flex; align-items:center; gap:6px; border:none; background:none;
+  color:#e8e8e8; padding:6px 10px; border-radius:6px; cursor:pointer;
+  font-size:12.5px; position:relative; white-space:nowrap;
+}
+.tb-app:hover { background:rgba(255,255,255,.14); }
+.tb-app .ico { font-size:17px; }
+.tb-app.active::after {
+  content:''; position:absolute; left:12%; right:12%; bottom:2px; height:3px;
+  background:#4fc3f7; border-radius:2px;
+}
+.tb-right { display:flex; flex-direction:column; align-items:flex-end; color:#eee; line-height:1.3; padding:0 8px; }
+.tb-time { font-size:12.5px; }
+.tb-date { font-size:10.5px; color:#bbb; }
+
+/* ============ 开始菜单 ============ */
+#startMenu {
+  position:absolute; left:10px; bottom:58px; width:520px; max-width:calc(100vw - 20px);
+  background:rgba(30,34,44,.96); backdrop-filter:blur(24px);
+  border-radius:12px; border:1px solid rgba(255,255,255,.08);
+  box-shadow:0 20px 60px rgba(0,0,0,.5); padding:18px; z-index:1100; display:none;
+}
+#startMenu.open { display:block; animation:menuIn .15s ease; }
+@keyframes menuIn { from { opacity:0; transform:translateY(14px) scale(.98); } to { opacity:1; transform:none; } }
+.sm-search input {
+  width:100%; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.15);
+  border-radius:999px; color:#eee; padding:9px 16px; font-size:13px; outline:none;
+}
+.sm-label { color:#99a; font-size:12px; margin:16px 4px 8px; }
+.sm-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; }
+.sm-tile {
+  border:none; border-radius:8px; color:#fff; height:76px; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:5px; font-size:11.5px; transition:transform .12s;
+}
+.sm-tile:hover { transform:scale(1.06); }
+.sm-tile .e { font-size:24px; }
+.sm-footer {
+  display:flex; align-items:center; justify-content:space-between; margin-top:18px;
+  padding-top:14px; border-top:1px solid rgba(255,255,255,.1); color:#ccc; font-size:12.5px;
+}
+.sm-power { border:none; background:rgba(255,255,255,.08); color:#eee; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:13px; }
+.sm-power:hover { background:rgba(255,255,255,.16); }
+
+/* ============ 右键菜单 / 提示 ============ */
+#ctxMenu {
+  position:fixed; min-width:190px; background:#fff; border-radius:8px;
+  box-shadow:0 10px 32px rgba(0,0,0,.35); padding:6px; z-index:1200; display:none;
+}
+#ctxMenu.open { display:block; }
+.ctx-item {
+  padding:8px 14px; font-size:13px; color:#333; border-radius:6px; cursor:pointer;
+  display:flex; align-items:center; gap:10px;
+}
+.ctx-item:hover { background:#f0f0f4; }
+.ctx-sep { height:1px; background:#e8e8ec; margin:5px 8px; }
+
+#toasts { position:fixed; right:14px; bottom:58px; display:flex; flex-direction:column; gap:8px; z-index:1300; }
+.toast {
+  background:rgba(28,32,42,.94); color:#eee; padding:11px 16px; border-radius:8px;
+  font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,.4);
+  border:1px solid rgba(255,255,255,.08); animation:toastIn .25s ease; max-width:360px;
+}
+.toast.hide { opacity:0; transform:translateX(20px); transition:.3s; }
+@keyframes toastIn { from { opacity:0; transform:translateX(30px); } to { opacity:1; transform:none; } }
+
+/* ============ 备忘录 ============ */
+.notes { display:flex; width:100%; height:100%; }
+.notes-side {
+  width:232px; background:#f2f2f7; border-right:1px solid #e0e0e6;
+  display:flex; flex-direction:column; flex-shrink:0;
+}
+.notes-side-head {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; font-weight:600; font-size:15px; color:#333;
+}
+.notes-add {
+  width:28px; height:28px; border-radius:50%; border:none; background:#d8d8de;
+  font-size:16px; cursor:pointer; color:#555; line-height:1;
+}
+.notes-add:hover { background:#c8c8ce; }
+.notes-search { padding:0 10px 10px; }
+.notes-search input {
+  width:100%; padding:7px 10px; border:none; border-radius:8px;
+  background:#e3e3e8; font-size:13px; outline:none;
+}
+.notes-list { flex:1; overflow-y:auto; padding:0 8px 10px; }
+.note-item { padding:10px 12px; border-radius:8px; cursor:pointer; margin-bottom:2px; }
+.note-item:hover { background:#e9e9ee; }
+.note-item.active { background:#ffe066; }
+.note-item .t {
+  font-size:14px; font-weight:600; color:#222;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.note-item .p {
+  font-size:12px; color:#777; margin-top:3px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.note-item .d { font-size:11px; color:#aaa; margin-top:4px; }
+.notes-main { flex:1; display:flex; flex-direction:column; background:#fff; min-width:0; }
+.notes-toolbar {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 16px; border-bottom:1px solid #eee; flex-shrink:0;
+}
+.notes-del { border:none; background:none; font-size:16px; cursor:pointer; opacity:.7; }
+.notes-del:hover { opacity:1; }
+.notes-status { font-size:12px; color:#999; }
+.notes-title { border:none; outline:none; font-size:22px; font-weight:700; padding:16px 20px 4px; }
+.notes-content { flex:1; border:none; outline:none; resize:none; font-size:15px; line-height:1.7; padding:12px 20px; }
+
+/* ============ 微信 ============ */
+.wx { display:flex; width:100%; height:100%; }
+.wx-rail {
+  width:58px; background:#2e2e2e; display:flex; flex-direction:column;
+  align-items:center; padding-top:14px; gap:6px; flex-shrink:0;
+}
+.wx-rail .avatar {
+  width:36px; height:36px; border-radius:6px; background:#576b95; color:#fff;
+  display:flex; align-items:center; justify-content:center; font-size:14px; margin-bottom:12px;
+}
+.wx-rail button {
+  width:38px; height:38px; border:none; border-radius:6px; background:none;
+  font-size:20px; cursor:pointer; opacity:.75;
+}
+.wx-rail button:hover { background:rgba(255,255,255,.12); opacity:1; }
+.wx-rail button.active { background:rgba(255,255,255,.16); opacity:1; }
+.wx-rail .spacer { flex:1; }
+.wx-list {
+  width:250px; background:#f7f7f7; border-right:1px solid #e6e6e6;
+  display:flex; flex-direction:column; flex-shrink:0;
+}
+.wx-search { padding:10px; }
+.wx-search input {
+  width:100%; padding:6px 10px; border:none; border-radius:4px;
+  background:#e2e2e2; font-size:12px; outline:none;
+}
+.wx-items { flex:1; overflow-y:auto; }
+.wx-contact { display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; }
+.wx-contact:hover { background:#ededed; }
+.wx-contact.active { background:#dcdcdc; }
+.wx-contact .info { flex:1; min-width:0; }
+.wx-contact .name {
+  font-size:13.5px; color:#222; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis;
+}
+.wx-contact .preview {
+  font-size:11.5px; color:#999; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; margin-top:3px;
+}
+.wx-contact .time { font-size:10.5px; color:#bbb; flex-shrink:0; align-self:flex-start; margin-top:2px; }
+.wx-chat { flex:1; display:flex; flex-direction:column; background:#f5f5f5; min-width:0; }
+.wx-chat-head {
+  height:48px; background:#f5f5f5; border-bottom:1px solid #e7e7e7;
+  display:flex; align-items:center; padding:0 16px;
+  font-size:15px; font-weight:600; color:#222; flex-shrink:0;
+}
+.wx-msgs { flex:1; overflow-y:auto; padding:10px 0; }
+.wx-time-div { text-align:center; font-size:11px; color:#b2b2b2; margin:10px 0; }
+.wx-msg { display:flex; gap:10px; margin:8px 16px; align-items:flex-start; }
+.wx-msg.me { flex-direction:row-reverse; }
+.wx-msg .avatar {
+  width:36px; height:36px; border-radius:6px; color:#fff; font-size:14px;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.wx-bubble {
+  max-width:62%; padding:9px 12px; font-size:14px; line-height:1.55;
+  border-radius:6px; word-break:break-word; white-space:pre-wrap;
+}
+.wx-msg.them .wx-bubble { background:#fff; }
+.wx-msg.me .wx-bubble { background:#95ec69; }
+.wx-typing { display:inline-flex; gap:4px; padding:13px 14px; }
+.wx-typing i { width:6px; height:6px; border-radius:50%; background:#999; animation:blink 1.2s infinite; }
+.wx-typing i:nth-child(2) { animation-delay:.2s; }
+.wx-typing i:nth-child(3) { animation-delay:.4s; }
+@keyframes blink { 0%,60%,100% { opacity:.3; } 30% { opacity:1; } }
+.wx-input {
+  background:#f5f5f5; border-top:1px solid #e7e7e7;
+  padding:8px 12px; position:relative; flex-shrink:0;
+}
+.wx-tools { display:flex; gap:6px; margin-bottom:6px; }
+.wx-tools button { border:none; background:none; font-size:17px; cursor:pointer; opacity:.75; padding:2px 4px; }
+.wx-tools button:hover { opacity:1; }
+.wx-input textarea {
+  width:100%; height:62px; border:none; outline:none; background:none;
+  font-size:14px; resize:none; line-height:1.5;
+}
+.wx-send-row { display:flex; justify-content:flex-end; margin-top:4px; }
+.wx-send { background:#07c160; color:#fff; border:none; border-radius:4px; padding:6px 22px; font-size:13px; cursor:pointer; }
+.wx-send:hover { background:#06ad56; }
+.wx-emoji-panel {
+  position:absolute; left:12px; bottom:118px; background:#fff;
+  border:1px solid #e3e3e3; border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,.15);
+  padding:8px; display:none; grid-template-columns:repeat(8,32px); gap:2px;
+}
+.wx-emoji-panel.open { display:grid; }
+.wx-emoji-panel span { font-size:20px; cursor:pointer; text-align:center; padding:2px; border-radius:4px; }
+.wx-emoji-panel span:hover { background:#f0f0f0; }
+
+/* ============ 媒体播放器 ============ */
+.player { display:flex; width:100%; height:100%; background:#141414; }
+.player-main { flex:1; display:flex; flex-direction:column; min-width:0; }
+.player-screen { flex:1; background:#000; position:relative; overflow:hidden; }
+.player-canvas { position:absolute; inset:0; width:100%; height:100%; }
+.player-video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+.player-overlay {
+  position:absolute; left:16px; top:12px; background:rgba(0,0,0,.55); color:#fff;
+  font-size:13px; padding:6px 12px; border-radius:6px; opacity:0; transition:opacity .4s;
+  pointer-events:none;
+}
+.player-overlay.show { opacity:1; }
+.player-note {
+  position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+  color:#ddd; font-size:22px;
+}
+.player-controls { display:flex; align-items:center; gap:10px; padding:10px 14px; background:#1e1e1e; color:#ddd; flex-shrink:0; }
+.pc-btn {
+  border:none; background:none; color:#ddd; font-size:16px; cursor:pointer;
+  width:30px; height:30px; border-radius:6px;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.pc-btn:hover { background:rgba(255,255,255,.12); color:#fff; }
+.pc-play { font-size:18px; }
+.pc-time { font-size:12px; color:#bbb; white-space:nowrap; }
+input[type=range] {
+  -webkit-appearance:none; appearance:none; height:4px; border-radius:2px;
+  background:rgba(255,255,255,.25); outline:none; cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; appearance:none; width:12px; height:12px;
+  border-radius:50%; background:#fff; cursor:pointer;
+}
+input[type=range]::-moz-range-thumb { width:12px; height:12px; border-radius:50%; background:#fff; border:none; cursor:pointer; }
+.pc-seek { flex:1; }
+.pc-vol { width:80px; }
+.player-side {
+  width:220px; background:#191919; border-left:1px solid #2a2a2a;
+  display:flex; flex-direction:column; flex-shrink:0;
+}
+.player-side-head {
+  padding:14px; font-size:14px; font-weight:600; color:#eee;
+  border-bottom:1px solid #2a2a2a; flex-shrink:0;
+}
+.player-side-items { flex:1; overflow-y:auto; padding:8px; }
+.pitem { padding:10px; border-radius:8px; cursor:pointer; margin-bottom:4px; }
+.pitem:hover { background:#242424; }
+.pitem.active { background:#2b3a2e; }
+.pitem .n { font-size:13px; color:#eee; }
+.pitem .d { font-size:11px; color:#888; margin-top:3px; }
+.player-side-foot { padding:12px; border-top:1px solid #2a2a2a; flex-shrink:0; }
+.player-side-foot button {
+  width:100%; background:#2b6cb0; color:#fff; border:none;
+  border-radius:6px; padding:8px; font-size:13px; cursor:pointer;
+}
+.player-side-foot button:hover { background:#2c5f96; }
+.player-tip { margin-top:10px; font-size:10.5px; color:#777; text-align:center; }
+
+/* ============ “不可以”弹窗 ============ */
+#denyModal {
+  position:fixed; inset:0; z-index:2000; display:none;
+  align-items:center; justify-content:center;
+  background:rgba(110,0,0,.8); backdrop-filter:blur(4px) saturate(1.2);
+}
+#denyModal.open { display:flex; animation:denyBg .7s ease-in-out infinite alternate; }
+@keyframes denyBg {
+  from { background-color:rgba(70,0,0,.72); }
+  to   { background-color:rgba(160,0,0,.9); }
+}
+.deny-card {
+  background:#fff; border-radius:16px; padding:18px 18px 22px;
+  box-shadow:0 20px 60px rgba(0,0,0,.6), 0 0 40px rgba(255,0,0,.5);
+  border:3px solid #c00;
+  text-align:center;
+  animation:denyIn .25s ease, denyShake .38s linear .25s infinite;
+}
+@keyframes denyIn { from { transform:scale(.5); opacity:0; } to { transform:scale(1); opacity:1; } }
+@keyframes denyShake {
+  0%,100% { transform:translate(0,0) rotate(0deg); }
+  10% { transform:translate(-16px,-12px) rotate(-18deg); }
+  20% { transform:translate(15px,10px) rotate(16deg); }
+  30% { transform:translate(-14px,12px) rotate(-14deg); }
+  40% { transform:translate(13px,-10px) rotate(12deg); }
+  50% { transform:translate(-11px,9px) rotate(-10deg); }
+  60% { transform:translate(10px,-8px) rotate(9deg); }
+  70% { transform:translate(-8px,7px) rotate(-8deg); }
+  80% { transform:translate(7px,-6px) rotate(7deg); }
+  90% { transform:translate(-5px,4px) rotate(-5deg); }
+}
+.deny-card img {
+  max-width:min(430px, 72vw); max-height:52vh; border-radius:12px; display:block;
+}
+.deny-text {
+  font-size:36px; font-weight:800; color:#e81123; margin-top:12px;
+  letter-spacing:2px;
+}
+
+/* ============ 全屏「救救我」效果 ============ */
+#helpOverlay {
+  position:fixed; inset:0; z-index:3000; display:none;
+  background:rgba(90,0,0,.92); overflow:hidden; cursor:pointer;
+}
+#helpOverlay.open { display:block; animation:helpFlash .18s linear 8, helpShake .35s linear 1.4s infinite; }
+@keyframes helpFlash {
+  0%,100% { background-color:rgba(150,0,0,.95); }
+  50% { background-color:rgba(40,0,0,.95); }
+}
+@keyframes helpShake {
+  0%,100% { transform:translate(0,0); }
+  20% { transform:translate(-12px,-8px); }
+  40% { transform:translate(10px,8px); }
+  60% { transform:translate(-8px,6px); }
+  80% { transform:translate(8px,-6px); }
+}
+.help-grid {
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:center;
+  align-content:center; gap:8px 16px; width:100%; height:100%; padding:16px;
+}
+.help-grid span {
+  font-family:'SimHei','Microsoft YaHei',sans-serif;
+  font-size:44px; font-weight:900; color:#ff1a1a;
+  text-shadow:0 0 12px rgba(255,0,0,.95), 0 0 32px rgba(255,0,0,.6);
+  white-space:nowrap;
+}
+
+@media (max-width:760px) {
+  .notes-side { width:170px; }
+  .wx-list { width:180px; }
+  .player-side { display:none; }
+}
+</style>
+</head>
+<body>
+<div id="desktop">
+  <div id="icons"></div>
+  <div id="windows"></div>
+
+  <div id="taskbar">
+    <button class="tb-start" id="startBtn" title="开始">
+      <span class="win-logo"><i></i><i></i><i></i><i></i></span>
+    </button>
+    <div id="tbApps"></div>
+    <div class="tb-right">
+      <div class="tb-time" id="tbTime">--:--</div>
+      <div class="tb-date" id="tbDate"></div>
+    </div>
+  </div>
+
+  <div id="startMenu">
+    <div class="sm-search"><input type="text" placeholder="在这里输入你要搜索的内容" id="smSearch"></div>
+    <div class="sm-label">已固定</div>
+    <div class="sm-grid" id="smGrid"></div>
+    <div class="sm-label">推荐</div>
+    <div class="sm-grid" id="smGrid2"></div>
+    <div class="sm-footer">
+      <span>👤 我的电脑</span>
+      <button class="sm-power" id="smPower">⏻ 关机</button>
+    </div>
+  </div>
+
+  <div id="ctxMenu">
+    <div class="ctx-item" data-act="refresh">🔄 刷新</div>
+    <div class="ctx-item" data-act="folder">📁 新建文件夹</div>
+    <div class="ctx-item" data-act="view">👁️ 查看</div>
+    <div class="ctx-item" data-act="personal">🎨 个性化</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" data-act="about">ℹ️ 关于本机</div>
+  </div>
+
+  <div id="helpOverlay">
+    <div class="help-grid"></div>
+  </div>
+
+  <div id="denyModal">
+    <div class="deny-card">
+      <img src="deny.jpg" alt="不可以">
+      <div class="deny-text">不可以 ！</div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+</div>
+
+<script>
+'use strict';
+
+/* ============ 工具函数 ============ */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const clamp = (v,a,b) => Math.max(a, Math.min(b,v));
+const pad = n => String(n).padStart(2,'0');
+const fmtTime = d => pad(d.getHours()) + ':' + pad(d.getMinutes());
+const fmtSec = s => { s = Math.max(0, Math.floor(s||0)); return pad(Math.floor(s/60)) + ':' + pad(s%60); };
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+}
+function fmtMsgTime(ts){
+  const d = new Date(ts), n = new Date();
+  const same = d.toDateString() === n.toDateString();
+  const yest = d.toDateString() === new Date(n.getFullYear(), n.getMonth(), n.getDate()-1).toDateString();
+  if (same) return fmtTime(d);
+  if (yest) return '昨天 ' + fmtTime(d);
+  return (d.getMonth()+1) + '月' + d.getDate() + '日 ' + fmtTime(d);
+}
+/* 本地存储（带内存兜底，避免 file:// 下被禁用时报错） */
+const memStore = {};
+const store = {
+  get(k, d){
+    try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); }
+    catch(e){ return (k in memStore) ? memStore[k] : d; }
+  },
+  set(k, v){
+    memStore[k] = v;
+    try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){}
+  }
+};
+
+/* ============ 应用定义 ============ */
+const APPS = {
+  notes:  { id:'notes',  name:'备忘录',     icon:'📝', w:800, h:540 },
+  wechat: { id:'wechat', name:'微信',       icon:'💬', w:940, h:600 },
+  player: { id:'player', name:'媒体播放器', icon:'🎬', w:880, h:560 },
+};
+const DECO_ICONS = [
+  ['计算器','🧮'],['日历','📅'],['文件管理器','🗂️'],['浏览器','🌐'],['设置','⚙️'],
+  ['画图','🎨'],['回收站','🗑️'],['天气','☀️'],['邮件','✉️'],['相机','📷'],
+  ['相册','🖼️'],['地图','🗺️'],['应用商店','🛒'],['阅读','📖'],['游戏','🎮'],
+];
+
+/* ============ 桌面图标 ============ */
+function renderIcons(){
+  const box = $('#icons');
+  box.innerHTML = '';
+  const add = (id, name, icon) => {
+    const d = document.createElement('div');
+    d.className = 'icon' + (id ? ' app-icon' : ' deco-icon');
+    d.innerHTML = `<div class="ico">${icon}</div><div class="label">${name}</div>`;
+    if (id){
+      d.addEventListener('dblclick', () => openApp(id));
+    } else {
+      d.addEventListener('click', () => {
+        d.classList.add('shake');
+        setTimeout(() => d.classList.remove('shake'), 500);
+        showDeny();
+      });
+    }
+    d.addEventListener('click', e => {
+      e.stopPropagation();
+      $$('.icon').forEach(i => i.classList.remove('selected'));
+      d.classList.add('selected');
+    });
+    box.appendChild(d);
+  };
+  Object.values(APPS).forEach(a => add(a.id, a.name, a.icon));
+  DECO_ICONS.forEach(([n,i]) => add(null, n, i));
+}
+
+/* ============ 窗口管理 ============ */
+let zTop = 10;
+let openCount = 0;
+const openWindows = {};
+
+function focusWin(win){
+  if (!win) return;
+  win.classList.add('active');
+  $$('.window').forEach(w => { if (w !== win) w.classList.remove('active'); });
+  win.style.zIndex = ++zTop;
+  updateTaskbar();
+}
+
+function makeDraggable(win, bar){
+  let startX = 0, startY = 0, origL = 0, origT = 0, active = false;
+  bar.addEventListener('pointerdown', e => {
+    if (e.target.closest('.win-btn')) return;
+    if (win.classList.contains('maximized')) return;
+    active = true;
+    startX = e.clientX; startY = e.clientY;
+    origL = win.offsetLeft; origT = win.offsetTop;
+    bar.setPointerCapture(e.pointerId);
+    focusWin(win);
+  });
+  bar.addEventListener('pointermove', e => {
+    if (!active) return;
+    const nl = clamp(origL + e.clientX - startX, -win.offsetWidth + 120, innerWidth - 120);
+    const nt = clamp(origT + e.clientY - startY, 0, innerHeight - 60);
+    win.style.left = nl + 'px';
+    win.style.top  = nt + 'px';
+  });
+  bar.addEventListener('pointerup', () => { active = false; });
+  bar.addEventListener('pointercancel', () => { active = false; });
+}
+
+function toggleMax(win){
+  if (win.classList.contains('maximized')){
+    win.classList.remove('maximized');
+    Object.assign(win.style, {
+      left: win.dataset.l, top: win.dataset.t,
+      width: win.dataset.w, height: win.dataset.h,
+    });
+  } else {
+    win.dataset.l = win.style.left; win.dataset.t = win.style.top;
+    win.dataset.w = win.style.width; win.dataset.h = win.style.height;
+    win.classList.add('maximized');
+  }
+}
+
+function createWindow(app){
+  const win = document.createElement('div');
+  win.className = 'window';
+  win.dataset.app = app.id;
+  const w = clamp(app.w, 420, innerWidth - 20);
+  const h = clamp(app.h, 320, innerHeight - 64);
+  const off = (openCount % 5) * 26;
+  const x = clamp((innerWidth - w) / 2 - 60 + off, 8, Math.max(8, innerWidth - w - 8));
+  const y = clamp((innerHeight - h - 48) / 2 - 60 + off, 8, Math.max(8, innerHeight - h - 56));
+  Object.assign(win.style, { left:x+'px', top:y+'px', width:w+'px', height:h+'px' });
+  win.innerHTML = `
+    <div class="titlebar">
+      <span class="win-ico">${app.icon}</span>
+      <span class="win-title">${app.name}</span>
+      <div class="win-controls">
+        <button class="win-btn win-min" title="最小化">─</button>
+        <button class="win-btn win-max" title="最大化">□</button>
+        <button class="win-btn win-close" title="关闭">✕</button>
+      </div>
+    </div>
+    <div class="win-body"></div>`;
+  return win;
+}
+
+function wireWindowButtons(win, id){
+  const bar = win.querySelector('.titlebar');
+  win.querySelector('.win-min').addEventListener('click', e => { e.stopPropagation(); minimizeApp(id); });
+  win.querySelector('.win-max').addEventListener('click', e => { e.stopPropagation(); toggleMax(win); });
+  win.querySelector('.win-close').addEventListener('click', e => { e.stopPropagation(); closeApp(id); });
+  bar.addEventListener('dblclick', e => { if (!e.target.closest('.win-btn')) toggleMax(win); });
+  win.addEventListener('pointerdown', () => focusWin(win), true);
+  makeDraggable(win, bar);
+}
+
+function openApp(id){
+  if (openWindows[id]){
+    const o = openWindows[id];
+    if (o.win.classList.contains('minimized')) o.win.classList.remove('minimized');
+    focusWin(o.win);
+    return;
+  }
+  const app = APPS[id];
+  if (!app) return;
+  const win = createWindow(app);
+  $('#windows').appendChild(win);
+  const body = win.querySelector('.win-body');
+  let cleanup = null;
+  if (id === 'notes')  cleanup = renderNotesApp(body);
+  if (id === 'wechat') cleanup = renderWechatApp(body);
+  if (id === 'player') cleanup = renderPlayerApp(body);
+  openWindows[id] = { win, app, cleanup };
+  wireWindowButtons(win, id);
+  focusWin(win);
+  openCount++;
+}
+
+function minimizeApp(id){
+  const o = openWindows[id];
+  if (!o) return;
+  o.win.classList.add('minimized');
+  o.win.classList.remove('active');
+  updateTaskbar();
+}
+
+function closeApp(id){
+  const o = openWindows[id];
+  if (!o) return;
+  if (o.cleanup) o.cleanup();
+  o.win.remove();
+  delete openWindows[id];
+  updateTaskbar();
+}
+
+/* ============ 任务栏 / 开始菜单 / 时钟 ============ */
+function updateTaskbar(){
+  const area = $('#tbApps');
+  area.innerHTML = '';
+  Object.keys(openWindows).forEach(id => {
+    const o = openWindows[id];
+    const b = document.createElement('button');
+    b.className = 'tb-app' + (o.win.classList.contains('active') ? ' active' : '');
+    b.innerHTML = `<span class="ico">${o.app.icon}</span><span class="nm">${o.app.name}</span>`;
+    b.onclick = () => {
+      if (o.win.classList.contains('minimized')){
+        o.win.classList.remove('minimized');
+        focusWin(o.win);
+      } else if (o.win.classList.contains('active')){
+        o.win.classList.add('minimized');
+        o.win.classList.remove('active');
+        updateTaskbar();
+      } else {
+        focusWin(o.win);
+      }
+    };
+    area.appendChild(b);
+  });
+}
+
+function renderStartMenu(){
+  const grid1 = $('#smGrid'), grid2 = $('#smGrid2');
+  const tiles1 = [
+    ['notes','📝','备忘录','#f5a623'],
+    ['wechat','💬','微信','#07c160'],
+    ['player','🎬','媒体播放器','#3b82c4'],
+    [null,'🧮','计算器','#8b5cf6'],
+    [null,'🌐','浏览器','#e8590c'],
+    [null,'⚙️','设置','#495057'],
+  ];
+  const tiles2 = [
+    [null,'📅','日历','#7048e8'],
+    [null,'🗂️','文件管理器','#f7b731'],
+    [null,'🎨','画图','#22b8cf'],
+    [null,'🛒','应用商店','#2f9e44'],
+    [null,'🎮','游戏','#d6336c'],
+    [null,'☀️','天气','#1971c2'],
+  ];
+  const mk = arr => arr.map(([id, e, name, color]) => `
+    <button class="sm-tile" style="background:${color}" data-id="${id||''}" data-name="${name}">
+      <span class="e">${e}</span><span>${name}</span>
+    </button>`).join('');
+  grid1.innerHTML = mk(tiles1);
+  grid2.innerHTML = mk(tiles2);
+  $$('.sm-tile').forEach(b => {
+    b.onclick = () => {
+      if (b.dataset.id) openApp(b.dataset.id);
+      else showDeny();
+      $('#startMenu').classList.remove('open');
+    };
+  });
+  $('#smPower').onclick = () => {
+    toast('这是网页做的电脑，可没法真正关机哦 😄');
+    $('#startMenu').classList.remove('open');
+  };
+}
+
+function tickClock(){
+  const n = new Date();
+  $('#tbTime').textContent = fmtTime(n);
+  $('#tbDate').textContent = n.getFullYear() + '/' + (n.getMonth()+1) + '/' + n.getDate()
+    + ' 周' + '日一二三四五六'[n.getDay()];
+}
+setInterval(tickClock, 1000);
+
+/* ============ 提示通知 ============ */
+function toast(msg, dur){
+  const box = $('#toasts');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  box.appendChild(t);
+  setTimeout(() => {
+    t.classList.add('hide');
+    setTimeout(() => t.remove(), 320);
+  }, dur || 2800);
+  while (box.children.length > 3) box.firstChild.remove();
+}
+
+/* ============ “不可以”弹窗 ============ */
+let denyTimer = 0;
+function showDeny(){
+  const m = $('#denyModal');
+  const card = m.querySelector('.deny-card');
+  card.style.animation = 'none';
+  void card.offsetWidth; /* 重新触发动画 */
+  card.style.animation = '';
+  m.classList.add('open');
+  clearTimeout(denyTimer);
+  denyTimer = setTimeout(() => m.classList.remove('open'), 5000);
+}
+$('#denyModal').addEventListener('click', e => {
+  if (e.target.closest('.deny-card')) return; /* 点照片继续抖，点其他地方恢复正常 */
+  $('#denyModal').classList.remove('open');
+  clearTimeout(denyTimer);
+});
+
+/* ============ 全屏「救救我」效果 ============ */
+let helpTimer = 0;
+function showHelpEffect(){
+  const ov = $('#helpOverlay');
+  const grid = ov.querySelector('.help-grid');
+  const cols = Math.max(3, Math.floor(innerWidth / 160));
+  const rows = Math.max(2, Math.floor(innerHeight / 95));
+  grid.innerHTML = '<span>救救我</span>'.repeat(Math.min(cols * rows, 280));
+  ov.classList.add('open');
+  clearTimeout(helpTimer);
+  helpTimer = setTimeout(() => ov.classList.remove('open'), 9000);
+}
+$('#helpOverlay').addEventListener('click', () => {
+  $('#helpOverlay').classList.remove('open');
+  clearTimeout(helpTimer);
+});
+
+/* ============ 备忘录应用 ============ */
+function renderNotesApp(body){
+  body.innerHTML = `
+    <div class="notes">
+      <aside class="notes-side">
+        <div class="notes-side-head">
+          <span>📝 备忘录</span>
+          <button class="notes-add" title="新建笔记">＋</button>
+        </div>
+        <div class="notes-search"><input type="text" placeholder="搜索"></div>
+        <div class="notes-list"></div>
+      </aside>
+      <div class="notes-main">
+        <div class="notes-toolbar">
+          <button class="notes-del" title="删除当前笔记">🗑️</button>
+          <span class="notes-status">已保存</span>
+        </div>
+        <input class="notes-title" placeholder="标题">
+        <textarea class="notes-content" placeholder="开始输入内容…"></textarea>
+      </div>
+    </div>`;
+
+  const listEl  = body.querySelector('.notes-list');
+  const searchEl= body.querySelector('.notes-search input');
+  const titleEl = body.querySelector('.notes-title');
+  const contentEl = body.querySelector('.notes-content');
+  const statusEl= body.querySelector('.notes-status');
+  const addBtn  = body.querySelector('.notes-add');
+  const delBtn  = body.querySelector('.notes-del');
+
+  let notes = store.get('mydesktop_notes', null);
+  if (!Array.isArray(notes) || notes.length === 0){
+    notes = [{
+      id:'n1', title:'欢迎使用备忘录', updated:Date.now(),
+      content:'这是「虚拟电脑桌面」自带的备忘录。\n\n📝 使用说明：\n· 点击左上角 ＋ 新建笔记\n· 内容自动保存，无需手动操作\n· 支持搜索（左上角搜索框）\n· 🗑️ 按钮可以删除当前笔记\n\n所有数据保存在浏览器本地，关闭网页也不会丢失。',
+    }];
+    store.set('mydesktop_notes', notes);
+  }
+  let currentId = null;
+  let saveTimer = 0;
+
+  const noteById = id => notes.find(n => n.id === id);
+
+  function persist(){
+    store.set('mydesktop_notes', notes);
+    statusEl.textContent = '已保存 ' + fmtTime(new Date());
+  }
+  function flushSave(){
+    if (saveTimer){ clearTimeout(saveTimer); saveTimer = 0; persist(); }
+  }
+  function scheduleSave(){
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = 0;
+      persist();
+      renderList();
+    }, 450);
+  }
+
+  function renderList(){
+    const q = searchEl.value.trim().toLowerCase();
+    const filtered = notes.filter(n =>
+      !q || (n.title||'').toLowerCase().includes(q) || (n.content||'').toLowerCase().includes(q));
+    const sorted = filtered.slice().sort((a,b) => b.updated - a.updated);
+    listEl.innerHTML = sorted.map(n => `
+      <div class="note-item ${n.id === currentId ? 'active' : ''}" data-id="${n.id}">
+        <div class="t">${esc(n.title) || '无标题'}</div>
+        <div class="p">${esc((n.content || '').replace(/\s+/g,' ')).slice(0,30) || '无内容'}</div>
+        <div class="d">${fmtMsgTime(n.updated)}</div>
+      </div>`).join('') || '<div style="padding:24px;color:#999;font-size:12px;text-align:center;">没有匹配的笔记</div>';
+    listEl.querySelectorAll('.note-item').forEach(el => {
+      el.onclick = () => { flushSave(); select(el.dataset.id); };
+    });
+  }
+
+  function select(id){
+    currentId = id;
+    const n = noteById(id);
+    if (!n) return;
+    titleEl.value = n.title;
+    contentEl.value = n.content;
+    renderList();
+  }
+
+  addBtn.onclick = () => {
+    flushSave();
+    const n = { id:'n' + Date.now(), title:'', content:'', updated:Date.now() };
+    notes.unshift(n);
+    select(n.id);
+    titleEl.focus();
+  };
+
+  delBtn.onclick = () => {
+    if (!noteById(currentId)) return;
+    if (!confirm('确定删除这条笔记吗？')) return;
+    flushSave();
+    notes = notes.filter(x => x.id !== currentId);
+    if (!notes.length){
+      notes.push({ id:'n' + Date.now(), title:'', content:'', updated:Date.now() });
+    }
+    persist();
+    select(notes[0].id);
+  };
+
+  titleEl.addEventListener('input', () => {
+    const n = noteById(currentId);
+    if (!n) return;
+    n.title = titleEl.value; n.updated = Date.now();
+    statusEl.textContent = '编辑中…';
+    scheduleSave();
+  });
+  contentEl.addEventListener('input', () => {
+    const n = noteById(currentId);
+    if (!n) return;
+    n.content = contentEl.value; n.updated = Date.now();
+    statusEl.textContent = '编辑中…';
+    scheduleSave();
+  });
+  searchEl.addEventListener('input', renderList);
+
+  select(notes[0].id);
+  return () => { flushSave(); };
+}
+
+/* ============ 微信应用 ============ */
+function seedWechat(){
+  const t = Date.now();
+  return {
+    filehelper: [],
+    zhang: [
+      { from:'them', text:'周末一起打球吗？🏀', time: t - 2*3600e3 },
+      { from:'me',   text:'好啊，老时间老地点！', time: t - 2*3600e3 + 60e3 },
+      { from:'them', text:'行，到时候叫你', time: t - 2*3600e3 + 120e3 },
+    ],
+    group: [
+      { from:'them', text:'新版需求文档我已经更新了', time: t - 24*3600e3 },
+      { from:'them', text:'大家记得这周五前完成自测', time: t - 24*3600e3 + 5*60e3 },
+      { from:'me',   text:'收到 👍', time: t - 24*3600e3 + 10*60e3 },
+    ],
+    mama: [
+      { from:'them', text:'吃饭了吗？', time: t - 3*3600e3 },
+    ],
+  };
+}
+
+const REPLIES = {
+  zhang: ['哈哈，可以可以','在呢在呢','晚点说，我在忙','没问题！','改天一起吃饭啊','👌👌'],
+  group: ['收到','+1','这个思路不错','我这边没意见','@所有人 明天上午十点开会','文档我看了，没问题'],
+  mama:  ['记得按时吃饭','早点休息，别熬夜','好的，注意身体','周末回家吗？','多穿点衣服，天冷了'],
+};
+
+function renderWechatApp(body){
+  const CONTACTS = [
+    { id:'filehelper', name:'文件传输助手', char:'📁', color:'#07c160' },
+    { id:'zhang',      name:'张小明',       char:'张',  color:'#f08c00' },
+    { id:'group',      name:'公司项目群',   char:'群',  color:'#3b82c4' },
+    { id:'mama',       name:'妈妈',         char:'妈',  color:'#e85b6c' },
+  ];
+  body.innerHTML = `
+    <div class="wx">
+      <div class="wx-rail">
+        <div class="avatar">我</div>
+        <button class="active" title="聊天">💬</button>
+        <button title="通讯录" class="wx-deco">👥</button>
+        <button title="收藏" class="wx-deco">⭐</button>
+        <button title="设置" class="wx-deco">⚙️</button>
+        <div class="spacer"></div>
+      </div>
+      <div class="wx-list">
+        <div class="wx-search"><input type="text" placeholder="搜索"></div>
+        <div class="wx-items"></div>
+      </div>
+      <div class="wx-chat">
+        <div class="wx-chat-head"></div>
+        <div class="wx-msgs"></div>
+        <div class="wx-input">
+          <div class="wx-tools">
+            <button class="wx-emoji-btn" title="表情">😊</button>
+            <button class="wx-deco" title="发送文件">📎</button>
+            <button class="wx-deco" title="截图">🖼️</button>
+          </div>
+          <div class="wx-emoji-panel"></div>
+          <textarea placeholder="输入消息…"></textarea>
+          <div class="wx-send-row"><button class="wx-send">发送 (Enter)</button></div>
+        </div>
+      </div>
+    </div>`;
+
+  let data = store.get('mydesktop_wechat', null);
+  if (!data || !data.zhang){ data = seedWechat(); store.set('mydesktop_wechat', data); }
+
+  let activeId = 'zhang';
+  const typingUntil = {};   // 联系人 -> “正在输入”截止时间戳
+  const replyTimers = {};   // 联系人 -> 自动回复定时器
+
+  const itemsEl  = body.querySelector('.wx-items');
+  const searchEl = body.querySelector('.wx-search input');
+  const headEl   = body.querySelector('.wx-chat-head');
+  const msgsEl   = body.querySelector('.wx-msgs');
+  const inputEl  = body.querySelector('.wx-input textarea');
+  const sendBtn  = body.querySelector('.wx-send');
+  const emojiBtn = body.querySelector('.wx-emoji-btn');
+  const emojiPanel = body.querySelector('.wx-emoji-panel');
+
+  const cInfo = id => CONTACTS.find(c => c.id === id);
+  const save = () => store.set('mydesktop_wechat', data);
+
+  const EMOJIS = ['😀','😁','😂','🤣','😊','😍','😘','😜','🤔','😎','🥳','😭','😡','👍','👎','🙏','👏','💪','🎉','❤️','🌹','🍚','☕','🍻'];
+  emojiPanel.innerHTML = EMOJIS.map(e => `<span>${e}</span>`).join('');
+  emojiPanel.querySelectorAll('span').forEach(s => {
+    s.onclick = () => {
+      const pos = inputEl.selectionStart || inputEl.value.length;
+      inputEl.value = inputEl.value.slice(0,pos) + s.textContent + inputEl.value.slice(pos);
+      inputEl.focus();
+    };
+  });
+  emojiBtn.onclick = () => emojiPanel.classList.toggle('open');
+
+  function renderList(){
+    const q = searchEl.value.trim().toLowerCase();
+    const filtered = CONTACTS.filter(c => !q || c.name.toLowerCase().includes(q));
+    const sorted = filtered.slice().sort((a,b) => {
+      const la = (data[a.id]||[]).slice(-1)[0];
+      const lb = (data[b.id]||[]).slice(-1)[0];
+      return (lb ? lb.time : 0) - (la ? la.time : 0);
+    });
+    itemsEl.innerHTML = sorted.map(c => {
+      const last = (data[c.id]||[]).slice(-1)[0];
+      const preview = last ? ((last.from === 'me' ? '我: ' : '') + last.text) : '';
+      return `
+        <div class="wx-contact ${c.id === activeId ? 'active' : ''}" data-id="${c.id}">
+          <div class="avatar" style="background:${c.color}">${c.char}</div>
+          <div class="info">
+            <div class="name">${c.name}</div>
+            <div class="preview">${esc(preview)}</div>
+          </div>
+          ${last ? `<div class="time">${fmtMsgTime(last.time)}</div>` : ''}
+        </div>`;
+    }).join('');
+    itemsEl.querySelectorAll('.wx-contact').forEach(el => {
+      el.onclick = () => select(el.dataset.id);
+    });
+  }
+
+  function renderChat(){
+    const c = cInfo(activeId);
+    headEl.textContent = c.name;
+    const ms = data[activeId] || [];
+    let html = '', prevT = 0;
+    ms.forEach(m => {
+      if (!prevT || m.time - prevT > 5*60e3){
+        html += `<div class="wx-time-div">${fmtMsgTime(m.time)}</div>`;
+      }
+      prevT = m.time;
+      const who = m.from === 'me' ? 'me' : 'them';
+      html += `
+        <div class="wx-msg ${who}">
+          <div class="avatar" style="background:${who === 'me' ? '#576b95' : c.color}">${who === 'me' ? '我' : c.char}</div>
+          <div class="wx-bubble">${esc(m.text)}</div>
+        </div>`;
+    });
+    if (typingUntil[activeId] && typingUntil[activeId] > Date.now()){
+      html += `
+        <div class="wx-msg them">
+          <div class="avatar" style="background:${c.color}">${c.char}</div>
+          <div class="wx-bubble wx-typing"><i></i><i></i><i></i></div>
+        </div>`;
+    }
+    msgsEl.innerHTML = html;
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+  }
+
+  function select(id){
+    activeId = id;
+    renderList();
+    renderChat();
+    inputEl.focus();
+  }
+
+  let eggClosed = false;
+  let eggRunning = false;
+  const eggTimers = [];
+  const eggLater = (fn, ms) => {
+    eggTimers.push(setTimeout(() => { if (!eggClosed) fn(); }, ms));
+  };
+  const eggSay = (msg, delay) => {
+    eggLater(() => {
+      (data.filehelper = data.filehelper || []).push({ from:'them', text:msg, time:Date.now() });
+      delete typingUntil.filehelper;
+      save(); renderChat(); renderList();
+    }, delay);
+  };
+  /* 彩蛋：文件传输助手只会回复这句话 */
+  function fileHelperEasterEgg(){
+    if (eggRunning) return;
+    eggRunning = true;
+    eggLater(() => { eggRunning = false; }, 13000);
+    /* 你认识我？ */
+    typingUntil.filehelper = Date.now() + 800;
+    renderChat();
+    eggSay('你认识我？', 800);
+    /* ……（正在输入） */
+    eggLater(() => { typingUntil.filehelper = Date.now() + 3000; renderChat(); }, 800);
+    /* 呜……呜……呜呜呜 */
+    eggSay('呜……呜……呜呜呜', 3800);
+    eggLater(() => { typingUntil.filehelper = Date.now() + 3000; renderChat(); }, 3800);
+    /* 连续十个「救救我」 */
+    for (let i = 0; i < 10; i++) eggSay('救救我', 6800 + i * 350);
+    /* 全屏效果 */
+    eggLater(() => showHelpEffect(), 10800);
+  }
+
+  function send(){
+    const text = inputEl.value.trim();
+    if (!text) return;
+    const ms = data[activeId] = data[activeId] || [];
+    ms.push({ from:'me', text, time:Date.now() });
+    inputEl.value = '';
+    save(); renderChat(); renderList();
+
+    if (activeId === 'filehelper'){
+      if (text === '姚孟彤，你好' || text === '姚孟彤你好') fileHelperEasterEgg();
+      return; /* 其他内容一律不回复 */
+    }
+    const delay = 900 + Math.random()*1400;
+    typingUntil[activeId] = Date.now() + delay;
+    renderChat();
+    clearTimeout(replyTimers[activeId]);
+    replyTimers[activeId] = setTimeout(() => {
+      const reply = REPLIES[activeId][Math.floor(Math.random() * REPLIES[activeId].length)];
+      delete typingUntil[activeId];
+      (data[activeId] = data[activeId] || []).push({ from:'them', text:reply, time:Date.now() });
+      save(); renderChat(); renderList();
+    }, delay);
+  }
+
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey){
+      e.preventDefault();
+      send();
+    }
+  });
+  sendBtn.onclick = send;
+  searchEl.addEventListener('input', renderList);
+  body.querySelectorAll('.wx-deco').forEach(b => {
+    b.onclick = () => toast('演示版仅开放「聊天」功能');
+  });
+
+  select('zhang');
+  return () => {
+    eggClosed = true;
+    Object.keys(replyTimers).forEach(k => clearTimeout(replyTimers[k]));
+    eggTimers.forEach(h => clearTimeout(h));
+  };
+}
+
+/* ============ 媒体播放器应用 ============ */
+function renderPlayerApp(body){
+  const TRACKS = [
+    { name:'星空之旅', desc:'流星划过的夜空', dur:30 },
+    { name:'霓虹波浪', desc:'律动的彩色光带', dur:30 },
+    { name:'粒子漩涡', desc:'旋转的星尘旋涡', dur:30 },
+  ];
+  body.innerHTML = `
+    <div class="player">
+      <div class="player-main">
+        <div class="player-screen">
+          <canvas class="player-canvas"></canvas>
+          <video class="player-video" style="display:none"></video>
+          <div class="player-overlay"></div>
+          <div class="player-note">♪ 音频播放中</div>
+        </div>
+        <div class="player-controls">
+          <button class="pc-btn pc-prev" title="上一个">⏮</button>
+          <button class="pc-btn pc-play" title="播放 / 暂停">▶</button>
+          <button class="pc-btn pc-next" title="下一个">⏭</button>
+          <span class="pc-time">00:00 / 00:00</span>
+          <input type="range" class="pc-seek" min="0" max="1000" value="0">
+          <span title="音量">🔊</span>
+          <input type="range" class="pc-vol" min="0" max="100" value="80">
+          <button class="pc-btn pc-file" title="打开本地文件">📂</button>
+          <button class="pc-btn pc-list" title="播放列表">☰</button>
+          <button class="pc-btn pc-fs" title="全屏">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          </button>
+          <input type="file" class="pc-file-input" accept="video/*,audio/*" hidden>
+        </div>
+      </div>
+      <aside class="player-side">
+        <div class="player-side-head">播放列表</div>
+        <div class="player-side-items"></div>
+        <div class="player-side-foot">
+          <button class="pc-open-file">📂 打开本地视频</button>
+          <div class="player-tip">演示动画由前端实时生成，无声音</div>
+        </div>
+      </aside>
+    </div>`;
+
+  const playerEl = body.querySelector('.player');
+  const screen   = body.querySelector('.player-screen');
+  const canvas   = body.querySelector('.player-canvas');
+  const video    = body.querySelector('.player-video');
+  const overlay  = body.querySelector('.player-overlay');
+  const note     = body.querySelector('.player-note');
+  const ctx      = canvas.getContext('2d');
+  const seekEl   = body.querySelector('.pc-seek');
+  const volEl    = body.querySelector('.pc-vol');
+  const timeEl   = body.querySelector('.pc-time');
+  const playBtn  = body.querySelector('.pc-play');
+  const prevBtn  = body.querySelector('.pc-prev');
+  const nextBtn  = body.querySelector('.pc-next');
+  const fsBtn    = body.querySelector('.pc-fs');
+  const sideItems= body.querySelector('.player-side-items');
+  const fileInput= body.querySelector('.pc-file-input');
+
+  let mode = 'demo';      // 'demo' 内置演示动画 | 'file' 本地文件
+  let idx = 0;            // 当前演示轨道
+  let t = 0;              // 演示模式当前时间(秒)
+  let playing = false;
+  let seeking = false;
+  let vol = 0.8;
+  let last = performance.now();
+  let rafId = 0, overlayTimer = 0, lastUrl = null;
+
+  /* 星空粒子缓存 */
+  let starCache = null, starKey = '';
+
+  function resize(){
+    const r = screen.getBoundingClientRect();
+    canvas.width = Math.max(2, r.width);
+    canvas.height = Math.max(2, r.height);
+    needDraw = true;
+  }
+
+  function getStars(){
+    const k = canvas.width + 'x' + canvas.height;
+    if (k === starKey && starCache) return starCache;
+    starCache = [];
+    for (let i = 0; i < 150; i++){
+      starCache.push({
+        nx: Math.random(), ny: Math.random(),
+        r: 0.5 + Math.random()*1.6,
+        tw: Math.random()*6.28,
+        sp: 0.002 + Math.random()*0.018,
+      });
+    }
+    starKey = k;
+    return starCache;
+  }
+
+  function drawStars(tt){
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = '#04060d';
+    ctx.fillRect(0,0,w,h);
+    const stars = getStars();
+    const prog = (tt / 30) % 1;
+    for (const s of stars){
+      const x = ((s.nx + s.sp * prog) % 1 + 1) % 1 * w;
+      const y = s.ny * h;
+      const a = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(tt*2 + s.tw));
+      ctx.fillStyle = 'rgba(255,255,255,' + a.toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(x, y, s.r, 0, 6.283); ctx.fill();
+    }
+    /* 月亮 */
+    const mx = w*0.78, my = h*0.22;
+    const g = ctx.createRadialGradient(mx,my,10, mx,my,90);
+    g.addColorStop(0,'rgba(230,240,255,0.9)');
+    g.addColorStop(0.4,'rgba(180,200,255,0.35)');
+    g.addColorStop(1,'rgba(180,200,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(mx,my,90,0,6.283); ctx.fill();
+    ctx.fillStyle = 'rgba(235,242,255,0.95)';
+    ctx.beginPath(); ctx.arc(mx,my,26,0,6.283); ctx.fill();
+    /* 流星 */
+    const ph = (tt % 9) / 9;
+    if (ph < 0.22){
+      const p = ph / 0.22;
+      const x0 = p * w * 1.25 - w * 0.12, y0 = p * h * 0.5;
+      const len = Math.min(w,h) * 0.15;
+      const grad = ctx.createLinearGradient(x0-len, y0-len*0.45, x0, y0);
+      grad.addColorStop(0,'rgba(255,255,255,0)');
+      grad.addColorStop(1,'rgba(255,255,255,.9)');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x0-len, y0-len*0.45); ctx.lineTo(x0, y0); ctx.stroke();
+    }
+  }
+
+  function drawWaves(tt){
+    const w = canvas.width, h = canvas.height;
+    const g = ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,'#0a0f2e');
+    g.addColorStop(1,'#160b38');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,w,h);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 5; i++){
+      const base = h * (0.22 + i*0.13);
+      const amp  = h * (0.045 + i*0.012);
+      ctx.beginPath();
+      for (let x = 0; x <= w; x += 3){
+        const y = base + Math.sin(x*0.007 + tt*(1.1 + i*0.22) + i*1.7) * amp;
+        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = 'hsla(' + ((tt*28 + i*55) % 360) + ',95%,62%,' + (0.75 - i*0.12).toFixed(3) + ')';
+      ctx.lineWidth = 2 + i*1.1;
+      ctx.stroke();
+    }
+  }
+
+  function drawVortex(tt){
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = '#08070f';
+    ctx.fillRect(0,0,w,h);
+    const cx = w/2, cy = h/2, N = 460;
+    const maxR = Math.min(w,h) * 0.46;
+    for (let i = 0; i < N; i++){
+      const f = i / N;
+      const r = f * maxR + Math.sin(tt*1.3 + f*20) * 2;
+      const a = f * Math.PI * 8 + tt * 0.7;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r * 0.92;
+      const hue = (f*320 + tt*36) % 360;
+      ctx.fillStyle = 'hsla(' + hue + ',85%,62%,' + (0.55 + f*0.45).toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(x, y, 1.2 + f*2.4, 0, 6.283); ctx.fill();
+    }
+  }
+
+  let needDraw = true;
+  function draw(){
+    const fns = [drawStars, drawWaves, drawVortex];
+    fns[idx](t);
+  }
+
+  function showTrack(){
+    overlay.textContent = '🎬 ' + TRACKS[idx].name;
+    overlay.classList.add('show');
+    clearTimeout(overlayTimer);
+    overlayTimer = setTimeout(() => overlay.classList.remove('show'), 1600);
+  }
+
+  function updateUI(){
+    let cur = 0, dur = TRACKS[idx].dur;
+    if (mode === 'demo'){
+      cur = t;
+    } else {
+      cur = video.currentTime || 0;
+      dur = isFinite(video.duration) ? video.duration : 0;
+    }
+    seekEl.value = dur ? Math.round(cur / dur * 1000) : 0;
+    timeEl.textContent = fmtSec(cur) + ' / ' + fmtSec(dur);
+    const isPlay = mode === 'demo' ? playing : (!video.paused && !video.ended);
+    playBtn.textContent = isPlay ? '⏸' : '▶';
+  }
+
+  function switchToDemo(){
+    mode = 'demo';
+    video.pause();
+    video.style.display = 'none';
+    canvas.style.display = 'block';
+    note.style.display = 'none';
+    if (lastUrl){ URL.revokeObjectURL(lastUrl); lastUrl = null; }
+    video.removeAttribute('src');
+    video.load();
+  }
+
+  function next(){
+    idx = (idx + 1) % TRACKS.length;
+    t = 0;
+    switchToDemo();
+    showTrack();
+    needDraw = true;
+    updateUI();
+  }
+  function prev(){
+    idx = (idx - 1 + TRACKS.length) % TRACKS.length;
+    t = 0;
+    switchToDemo();
+    showTrack();
+    needDraw = true;
+    updateUI();
+  }
+
+  function renderSide(){
+    sideItems.innerHTML = TRACKS.map((tr, i) => `
+      <div class="pitem ${i === idx ? 'active' : ''}" data-i="${i}">
+        <div class="n">${tr.name}</div>
+        <div class="d">${tr.desc}</div>
+      </div>`).join('');
+    sideItems.querySelectorAll('.pitem').forEach(el => {
+      el.onclick = () => {
+        idx = +el.dataset.i;
+        t = 0;
+        switchToDemo();
+        playing = true;
+        showTrack();
+        needDraw = true;
+        renderSide();
+        updateUI();
+      };
+    });
+  }
+
+  function loop(now){
+    const dt = Math.min((now - last) / 1000, 0.1);
+    last = now;
+    if (mode === 'demo'){
+      if (playing && !seeking){
+        t += dt;
+        if (t >= TRACKS[idx].dur){
+          idx = (idx + 1) % TRACKS.length;
+          t = 0;
+          renderSide();
+          showTrack();
+        }
+        needDraw = true;
+      }
+      if (needDraw){ draw(); needDraw = false; }
+      updateUI();
+    } else {
+      updateUI();
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  playBtn.onclick = () => {
+    if (mode === 'demo'){
+      if (!playing && t >= TRACKS[idx].dur) t = 0;
+      playing = !playing;
+      last = performance.now();
+    } else {
+      if (video.paused){ video.play().catch(() => {}); }
+      else { video.pause(); }
+    }
+    updateUI();
+  };
+  prevBtn.onclick = prev;
+  nextBtn.onclick = next;
+
+  seekEl.addEventListener('pointerdown', () => { seeking = true; });
+  window.addEventListener('pointerup', () => { seeking = false; });
+  seekEl.addEventListener('input', () => {
+    if (mode === 'demo'){
+      t = seekEl.value / 1000 * TRACKS[idx].dur;
+      needDraw = true;
+    } else if (isFinite(video.duration)){
+      video.currentTime = seekEl.value / 1000 * video.duration;
+    }
+    updateUI();
+  });
+
+  volEl.addEventListener('input', () => {
+    vol = volEl.value / 100;
+    video.volume = vol;
+  });
+
+  video.addEventListener('timeupdate', updateUI);
+  video.addEventListener('ended', () => { next(); });
+
+  const pickFile = () => fileInput.click();
+  body.querySelector('.pc-file').onclick = pickFile;
+  body.querySelector('.pc-open-file').onclick = pickFile;
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files[0];
+    if (!f) return;
+    fileInput.value = '';
+    if (lastUrl) URL.revokeObjectURL(lastUrl);
+    lastUrl = URL.createObjectURL(f);
+    mode = 'file';
+    playing = false;
+    canvas.style.display = 'none';
+    video.style.display = 'block';
+    note.style.display = f.type.indexOf('audio') === 0 ? 'flex' : 'none';
+    video.src = lastUrl;
+    video.volume = vol;
+    video.play().catch(() => {});
+    updateUI();
+  });
+
+  body.querySelector('.pc-list').onclick = () => {
+    const side = body.querySelector('.player-side');
+    side.style.display = side.style.display === 'none' ? 'flex' : 'none';
+  };
+
+  fsBtn.onclick = () => {
+    if (document.fullscreenElement){ document.exitFullscreen(); }
+    else if (playerEl.requestFullscreen){ playerEl.requestFullscreen(); }
+  };
+
+  const onWinResize = () => resize();
+  const onFsChange = () => resize();
+  window.addEventListener('resize', onWinResize);
+  document.addEventListener('fullscreenchange', onFsChange);
+
+  resize();
+  renderSide();
+  showTrack();
+  updateUI();
+  rafId = requestAnimationFrame(loop);
+
+  return () => {
+    cancelAnimationFrame(rafId);
+    clearTimeout(overlayTimer);
+    if (lastUrl) URL.revokeObjectURL(lastUrl);
+    window.removeEventListener('resize', onWinResize);
+    document.removeEventListener('fullscreenchange', onFsChange);
+  };
+}
+
+/* ============ 右键菜单 ============ */
+function showCtx(x, y){
+  const m = $('#ctxMenu');
+  m.style.left = clamp(x, 4, innerWidth - 200) + 'px';
+  m.style.top  = clamp(y, 4, innerHeight - 240) + 'px';
+  m.classList.add('open');
+}
+function hideCtx(){ $('#ctxMenu').classList.remove('open'); }
+
+const ctxActs = {
+  refresh:  () => location.reload(),
+  folder:   () => toast('演示模式：不能真正新建文件夹 😄'),
+  view:     () => toast('演示模式：不能修改显示设置 😄'),
+  personal: () => toast('这张壁纸挺好看的，对吧？😄'),
+  about:    () => toast('这是一台网页做的电脑：纯 HTML + CSS + JavaScript，无需服务器'),
+};
+$$('#ctxMenu .ctx-item').forEach(el => {
+  el.onclick = () => { hideCtx(); (ctxActs[el.dataset.act] || (() => {}))(); };
+});
+
+/* ============ 全局交互 ============ */
+const desktop = $('#desktop');
+
+desktop.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if (e.target.closest('.window') || e.target.closest('.icon')) return;
+  showCtx(e.clientX, e.clientY);
+});
+document.addEventListener('click', e => {
+  hideCtx();
+  if (!e.target.closest('.icon')) $$('.icon').forEach(i => i.classList.remove('selected'));
+});
+document.addEventListener('contextmenu', () => hideCtx());
+
+$('#startBtn').onclick = e => {
+  e.stopPropagation();
+  $('#startMenu').classList.toggle('open');
+};
+document.addEventListener('click', e => {
+  const sm = $('#startMenu');
+  if (!sm.contains(e.target) && e.target !== $('#startBtn')) sm.classList.remove('open');
+});
+
+/* ============ 初始化 ============ */
+renderIcons();
+renderStartMenu();
+tickClock();
+setTimeout(() => {
+  toast('👋 欢迎来到虚拟电脑桌面！双击带绿点的「备忘录 / 微信 / 媒体播放器」图标即可打开应用');
+}, 600);
+</script>
+</body>
+</html>
